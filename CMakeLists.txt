@@ -4,13 +4,6 @@
 
 cmake_minimum_required(VERSION 3.2)
 
-include("cmake/HunterGate.cmake")
-HunterGate(
-    URL "https://github.com/cpp-pm/hunter/archive/v0.23.320.tar.gz"
-    SHA1 "9b4e732afd22f40482c11ad6342f7d336634226f"
-    LOCAL # Local config for dependencies
-)
-
 ### Constants
 set(TARGET_NAME "XLink")
 set(TARGET_PUBLIC_NAME "XLinkPublic")
