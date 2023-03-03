@@ -3,6 +3,18 @@
 # With additions of Luxonis
 
 cmake_minimum_required(VERSION 3.2)
+string(ASCII 27 Esc)
+string(ASCII 27 Esc)
+
+set(CYN "${Esc}[0;36m")
+set(NOC  "${Esc}[m")
+set(CYN "${Esc}[0;36m")
+set(NOC  "${Esc}[m")
+
+function(show_message arg_name arg_value)
+    message("${CYN}${arg_name}:${NOC} ${arg_value}")
+endfunction()
+
 
 ### Constants
 set(TARGET_NAME "XLink")
@@ -12,33 +24,15 @@ set(TARGET_PUBLIC_NAME "XLinkPublic")
 project(${TARGET_NAME} LANGUAGES C CXX)
 
 set(PROJECT_EXPORT_GROUP "${PROJECT_NAME}Targets")
+message(STATUS "${CYN}PROJECT_EXPORT_GROUP:${NOC} ${PROJECT_EXPORT_GROUP}")
 
-# Set default installation directory
-if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
-    set(CMAKE_INSTALL_PREFIX "${CMAKE_BINARY_DIR}/install" CACHE PATH "Installation Directory" FORCE)
-endif()
+# Set default installation directory -- we should use the default one, instead of revising it
+# where is "CMAKE_INSTALL_PREFIX" used?
+message(STATUS "${CYN}CMAKE_BINARY_DIR:${NOC} ${CMAKE_BINARY_DIR}")
+message(STATUS "${CYN}CMAKE_INSTALL_PREFIX:${NOC} ${CMAKE_INSTALL_PREFIX}")
 
 include(cmake/XLink.cmake)
 include(cmake/Flags.cmake)
-
-# Build examples
-option(XLINK_BUILD_EXAMPLES "Build XLink examples" OFF)
-# Build tests
-option(XLINK_BUILD_TESTS "Build XLink tests" OFF)
-# Debug option
-set(XLINK_LIBUSB_LOCAL "" CACHE STRING "Path to local libub source to use instead of Hunter")
-# Debug option
-option(XLINK_LIBUSB_SYSTEM "Use system libusb library instead of Hunter" OFF)
-
-if(XLINK_LIBUSB_LOCAL AND XLINK_LIBUSB_SYSTEM)
-    message(FATAL_ERROR "XLINK_LIBUSB_LOCAL and XLINK_LIBUSB_SYSTEM options are mutually exclusive!")
-endif()
-
-message(STATUS "Configuring XLink with the following options:")
-message(STATUS "  XLINK_BUILD_EXAMPLES: ${XLINK_BUILD_EXAMPLES}")
-message(STATUS "  XLINK_BUILD_TESTS: ${XLINK_BUILD_TESTS}")
-message(STATUS "  XLINK_LIBUSB_LOCAL: ${XLINK_LIBUSB_LOCAL}")
-message(STATUS "  XLINK_LIBUSB_SYSTEM: ${XLINK_LIBUSB_SYSTEM}")
 
 # Create library target
 add_library(${TARGET_NAME} ${XLINK_SOURCES})
@@ -51,50 +45,11 @@ endif()
 # Add dependencies
 include(cmake/XLinkDependencies.cmake)
 
-if(XLINK_LIBUSB_SYSTEM)
-    # Find system libusb
-    find_path(LIBUSB_INCLUDE_DIR NAMES libusb.h PATH_SUFFIXES "include" "libusb" "libusb-1.0")
-    find_library(LIBUSB_LIBRARY NAMES usb-1.0 PATH_SUFFIXES "lib")
-    if(NOT LIBUSB_INCLUDE_DIR OR NOT LIBUSB_LIBRARY)
-        message(FATAL_ERROR "libusb is required")
-    endif()
-    target_include_directories(${TARGET_NAME}
-        PRIVATE "${LIBUSB_INCLUDE_DIR}"
-    )
-    target_link_libraries(${TARGET_NAME}
-        PUBLIC ${LIBUSB_LIBRARY}
-    )
-else()
-    # Link to CMake libusb
-    target_link_libraries(${TARGET_NAME} PRIVATE usb-1.0)
-    if(WIN32 AND NOT MINGW)
-        target_link_libraries(${TARGET_NAME} PRIVATE delayimp.lib Pathcch.lib)
-        # workaround https://gitlab.kitware.com/cmake/cmake/-/issues/20022
-        target_link_options(${TARGET_NAME} PUBLIC "$<LINK_ONLY:/DELAYLOAD:libusb-1.0$<$<CONFIG:Debug>:d>.dll>")
-    endif()
-endif()
+# Link to CMake libusb
+target_link_libraries(${TARGET_NAME} PRIVATE luxonis-usb-1.0)
 
-if(WIN32)
-    target_compile_definitions(${TARGET_NAME} PRIVATE WIN32_LEAN_AND_MEAN)
-else()
-    find_package(Threads REQUIRED)
-    target_link_libraries(${TARGET_NAME} PRIVATE Threads::Threads)
-endif()
-
-if(MINGW)
-    target_link_libraries(${TARGET_NAME}
-        PUBLIC
-            libwinusb.a
-            libsetupapi.a
-            ws2_32
-            Iphlpapi.lib
-    )
-endif()
-
-if(ANDROID)
-    find_library(log-lib log)
-    target_link_libraries(${TARGET_NAME} PRIVATE ${log-lib})
-endif()
+find_package(Threads REQUIRED)
+target_link_libraries(${TARGET_NAME} PRIVATE Threads::Threads)
 
 # Create public "interface" library (no linking)
 add_library(${TARGET_PUBLIC_NAME} INTERFACE)
@@ -112,10 +67,6 @@ target_include_directories(${TARGET_NAME}
         ${XLINK_PRIVATE_INCLUDE}
         ${XLINK_INCLUDE}/XLink
 )
-
-if(XLINK_LIBUSB_LOCAL)
-    target_compile_definitions(${TARGET_NAME} PRIVATE XLINK_LIBUSB_LOCAL)
-endif()
 
 target_compile_definitions(${TARGET_NAME}
     PRIVATE
@@ -147,45 +98,13 @@ endif()
 # Add flags
 add_default_flags(${TARGET_NAME})
 
-# Check if pthread_getname_np exists
-if(NOT WIN32)
-    include(CheckSymbolExists)
-    set(_TMP_CMAKE_REQUIRED_DEFINITIONS "${CMAKE_REQUIRED_DEFINITIONS}")
-    set(_TMP_CMAKE_REQUIRED_LIBRARIES "${CMAKE_REQUIRED_LIBRARIES}")
-    set(_TMP_CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
-    list(APPEND CMAKE_REQUIRED_DEFINITIONS -D_GNU_SOURCE)
-    list(APPEND CMAKE_REQUIRED_LIBRARIES "-lpthread")
-    # This flag breaks check_symbol_exists()
-    string(REPLACE " -Werror " " " CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
-
-    # perfom check for pthread_getname_np symbol
-    check_symbol_exists(pthread_getname_np pthread.h HAVE_PTHREAD_GETNAME_NP)
-
-    set(CMAKE_REQUIRED_DEFINITIONS "${_TMP_CMAKE_REQUIRED_DEFINITIONS}")
-    set(CMAKE_REQUIRED_LIBRARIES "${_TMP_CMAKE_REQUIRED_LIBRARIES}")
-    set(CMAKE_C_FLAGS "${_TMP_CMAKE_C_FLAGS}")
-    unset(_TMP_CMAKE_REQUIRED_DEFINITIONS)
-    unset(_TMP_CMAKE_REQUIRED_LIBRARIES)
-    unset(_TMP_CMAKE_C_FLAGS)
-
-    # Set the define
-    if(HAVE_PTHREAD_GETNAME_NP)
-        target_compile_definitions(${TARGET_NAME} PRIVATE HAVE_PTHREAD_GETNAME_NP)
-    endif()
-endif()
-
 # Examples
-if(XLINK_BUILD_EXAMPLES)
-    add_subdirectory(examples)
-endif()
+add_subdirectory(examples)
 
 # Tests
-if(XLINK_BUILD_TESTS)
-    add_subdirectory(tests)
-endif()
+add_subdirectory(tests)
 
 # Installation
-
 include(GNUInstallDirs)
 
 # Export targets (capability to import current build directory)
@@ -193,11 +112,6 @@ export(TARGETS ${TARGET_NAME} ${TARGET_PUBLIC_NAME} FILE "${PROJECT_NAME}Targets
 
 # Dependencies file
 configure_file("cmake/${PROJECT_NAME}Dependencies.cmake" ${PROJECT_NAME}Dependencies.cmake COPYONLY)
-
-# Configure config file (one for exporting build directory, one for installation)
-if(${HUNTER_INSTALL_PREFIX})
-    file(RELATIVE_PATH XLINK_DEPENDENCIES_INSTALLATION_PATH_REL "${CMAKE_CURRENT_BINARY_DIR}" "${HUNTER_INSTALL_PREFIX}")
-endif()
 
 configure_file(cmake/${PROJECT_NAME}Config.cmake.in ${PROJECT_NAME}Config.cmake @ONLY)
 
@@ -215,10 +129,7 @@ install(
 )
 #Install include folder
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-# Install Hunter dependencies
-if(NOT XLINK_LIBUSB_LOCAL AND NOT XLINK_LIBUSB_SYSTEM)
-    install(DIRECTORY "${HUNTER_INSTALL_PREFIX}/" DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}/dependencies")
-endif()
+
 # Install export group (information about targets)
 install(EXPORT ${PROJECT_EXPORT_GROUP}
     DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}"

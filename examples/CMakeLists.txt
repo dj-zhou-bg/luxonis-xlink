@@ -5,30 +5,10 @@ macro(add_example example_name example_src)
     set_property(TARGET ${example_name} PROPERTY CXX_STANDARD 11)
     set_property(TARGET ${example_name} PROPERTY CXX_STANDARD_REQUIRED ON)
     set_property(TARGET ${example_name} PROPERTY CXX_EXTENSIONS OFF)
-
-    # Copy over required DLLs (Windows)
-    if(WIN32)
-        # Copy dlls to target directory - Windows only
-        # TARGET_RUNTIME_DLLS generator expression available since CMake 3.21
-        if(CMAKE_VERSION VERSION_LESS "3.21")
-            message(WARNING "Automatic DLL copying not available")
-        else()
-            set(depthai_dll_libraries "$<TARGET_RUNTIME_DLLS:${example_name}>")
-            add_custom_command(TARGET ${example_name} POST_BUILD COMMAND
-                ${CMAKE_COMMAND} -E copy_if_different ${depthai_dll_libraries} $<TARGET_FILE_DIR:${example_name}>
-                COMMAND_EXPAND_LISTS
-            )
-        endif()
-    endif()
+    install(TARGETS ${example_name} RUNTIME DESTINATION bin)
 endmacro()
 
 # Examples
-
-# List devices
-add_example(list_devices list_devices.cpp)
-
-# Boot bootloader
-add_example(boot_bootloader boot_bootloader.cpp)
-
-# Boot firmware
-add_example(boot_firmware boot_firmware.cpp)
+add_example(oak-list-devices list_devices.cpp)
+add_example(oak-boot-bootloader boot_bootloader.cpp)
+add_example(oak-boot-firmware boot_firmware.cpp)
